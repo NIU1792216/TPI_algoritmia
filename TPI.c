@@ -1,7 +1,8 @@
 // 1792216 Mario Roda Sevilla
+#include <float.h>
 #define __USE_MINGW_ANSI_STDIO 1
 #define R 6371.0 // Radi de la Terra en km
-#define _USE_MATH_DEFINES // Per poder usar M_PI
+#define PI 3.1415926535897932384626433832795028841971
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -33,11 +34,9 @@ typedef struct {
 } Cua;
 
 // Definim una funcio per calcular la distancia real entre dos nodes
-double distancia(const Node *n1, const Node *n2);
+double distancia(const Node *node1, const Node *node2);
 // Definim la funcio per calcular el cami recorregut fins arribar a un node
 double pes(Node *n);
-// definim la funcio de cost de cada node 
-double cost(Node *n, const Node *objectiu);
 // Definim una funcio per trobar la posicio d'un node a la llista de nodes a partir del seu id
 long unsigned index_node(unsigned long long ident, const Node *nodes, unsigned long num_nodes);
 // Definim una funcio per llegir un fitxer amb nodes
@@ -45,17 +44,19 @@ void llegir_nodes(char nom_fitxer[], Node **nodes, unsigned long *num_nodes_lleg
 // Definim una funcio per llegir un fitxer amb carrers i guardar les dades en uns nodes donats
 void llegir_carrers(char nom_fitxer[], Node *nodes, unsigned long num_nodes);
 // Definim una funcio per afegir a dos nodes la conexio entre cada un d'ells a traves d'un carrer
-void afegir_conexio(Node *n1, Node *n2, unsigned long id_carrer);
+void afegir_conexio(Node *node1, Node *node2, unsigned long id_carrer);
 // Definim la funcio per posar elements a la cua
-void encua(Cua *c, Node *n, Node *objectiu);
+void encua(Cua *c, Node *nodes, unsigned long num_nodes, Node *n, const double *pesos);
 // Definim la funcio per canviar la posicio a la cua d'un element
-void reencua(Cua *c, Node *n, Node *objectiu);
+void reencua(Cua *c, Node *nodes, unsigned long num_nodes, Node *n, const double *pesos);
 // Definim la funcio per treure un node de la cua
 Node *desencua(Cua *c);
 // Definim una funcio per poder ordenar llistes de nodes pel seu id
 int comparar_nodes(const void *a, const void *b);
 // Definim una funcio per mostrar el cami recorregut fins a un node donat
 void mostrar_cami(Node *n);
+// Definim la funcio per recorrer una llista i trobar el cami mes eficient (A*)
+bool A(Node *, unsigned long num_nodes, Node *inicial, Node*final);
 
 int main(int argc, char *argv[]){
     // Comprovem que hi hagi dos arguments en la crida del programa
@@ -90,63 +91,28 @@ int main(int argc, char *argv[]){
     // Llegim les dades del fitxer Carrers.csv i guardem la informacio a nodes
     llegir_carrers("Carrers_Sb.csv", nodes, num_nodes);
     printf("S'ha llegit correctament el fitxer amb carrers\n");
-    // La cua que utilitzarem
-    Cua cua;
-    // Marcador dels nodes visitats
-    bool *visitat;
-    // Marcador dels nodes expandits
-    bool *expandit;
-    if((visitat = (bool *)calloc(num_nodes, sizeof(bool))) == NULL){
-        perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
-        exit(EXIT_FAILURE);
-    }
-    if((expandit = (bool *)calloc(num_nodes, sizeof(bool))) == NULL){
-        perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
-        exit(EXIT_FAILURE);
-    }
-    // Guardem la direccio del node inicial
+    
+    // Localitzem el node inicial
     Node *inicial = &nodes[index_node(id_inicial, nodes, num_nodes)];
-    // Guardem la direccio del node final
+    // Localitzem el node final
     Node *final = &nodes[index_node(id_final, nodes, num_nodes)];
-    encua(&cua, inicial, final);
-    Node *actual;
-    while (cua.inici != NULL){
-        actual = desencua(&cua);
-        if (actual == final) break;
-        for (unsigned i=0; i<actual->num_conexions; i++){
-            unsigned long id_fill = actual->conexions[i].id_node;
-            Node * fill = &nodes[index_node(id_fill, nodes, num_nodes)];
-            double nou_cost = pes(actual) + distancia(actual, fill);
-            if (!visitat[id_fill]){
-                fill->pare = actual;
-                encua(&cua, fill, final);
-            }
-            else{
-                if (nou_cost < cost(fill, final)){
-                    fill->pare = actual;
-                    reencua(&cua, fill, final);
-                }
-            }
-        }
-    }
-    printf("Acabem el BFS");
-    // Comprovem si no hem trobat el cami
-    if (actual != final){
-        printf("No s'ha pogut trobar un cami des del node %llu fins al node %llu", inicial->id, final->id);
-        exit(EXIT_FAILURE);
-    }
-    mostrar_cami(actual);
+    bool trobat = A(nodes, num_nodes, inicial, final);
+
+    if (!trobat) printf("No s'ha pogut trobar un cami des del node %llu fins al node %llu\n", id_inicial, id_final);
+    else mostrar_cami(final);
+    // Alliberem memoria
+    for (unsigned long i=0; i<num_nodes; i++) free(nodes[i].conexions);
     free(nodes);
     return 0;
 }
 
-double distancia(const Node *n1, const Node *n2){
+double distancia(const Node *node1, const Node *node2){
     // Convertim les latituds de graus a radians
-    double lat1_rad = n1->latitud * M_PI / 180.0;
-    double lat2_rad = n2->latitud * M_PI / 180.0;
+    double lat1_rad = node1->latitud * PI / 180.0;
+    double lat2_rad = node2->latitud * PI / 180.0;
     // Convertim les longituds de graus a radians
-    double long1_rad = n1->longitud * M_PI / 180.0;
-    double long2_rad = n2->longitud * M_PI / 180.0;
+    double long1_rad = node1->longitud * PI / 180.0;
+    double long2_rad = node2->longitud * PI / 180.0;
     // Calculem les diferències de latitud i longitud en radians
     double dlat = lat2_rad - lat1_rad;
     double dlong = long2_rad - long1_rad;
@@ -164,11 +130,9 @@ double pes(Node *n){
     Node *actual = n;
     while (actual->pare != NULL){
         pes += distancia(actual, actual->pare);
+        actual = actual->pare;
     }
     return pes;
-}
-double cost(Node *n, const Node *objectiu){
-    return pes(n) + distancia(n, objectiu);
 }
 long unsigned index_node(unsigned long long ident, const Node *nodes, unsigned long num_nodes){
     // Asumim que la llista nodes esta ordenada
@@ -203,7 +167,7 @@ void llegir_nodes(char nom_fitxer[], Node **nodes, unsigned long *num_nodes_lleg
     */
     // Comptador dels nodes del fitxer (correspon tambe a les linies del fitxer)
     unsigned long num_nodes = 0;
-    FILE *fitxer;
+    FILE *fitxer=NULL;
     fitxer = fopen(nom_fitxer, "r");
     if(fitxer == NULL) {
         perror("No s'ha pogut obrir el fitxer Nodes.csv\n");
@@ -247,7 +211,7 @@ void llegir_carrers(char nom_fitxer[], Node *nodes, unsigned long num_nodes){
     per afegir-los les conexions de cada node
     */
     // --------------- Lectura informacio basica carrers ---------------------
-    FILE *fitxer;
+    FILE *fitxer=NULL;
     fitxer = fopen(nom_fitxer,"r");
     if (fitxer == NULL){
         perror("No s'ha pogut obrir el fitxer Carrers.csv\n");
@@ -265,7 +229,7 @@ void llegir_carrers(char nom_fitxer[], Node *nodes, unsigned long num_nodes){
     // En una variable guardem el nombre de carrers que conte el fitxer (correspon al nombre de linies) 
     unsigned long num_carrers = 0; 
     // Comptem el nombre de carrers del fitxer i el nombre de nodes de cada un
-    char caracter;
+    int caracter=0;
     while((caracter = fgetc(fitxer)) != EOF) {
         if (caracter == ';'){
             num_conexions[num_carrers]++;
@@ -289,48 +253,50 @@ void llegir_carrers(char nom_fitxer[], Node *nodes, unsigned long num_nodes){
     // --------------- Lectura de conexions de cada carrer ------------------
     for (long unsigned i=0; i<num_carrers; i++){
         // en conexions guardarem l'index dels nodes del carrer que analitzem
-        Node ** conexions;
+        Node ** conexions=NULL;
         if((conexions = (Node **)malloc(num_conexions[i]*sizeof(Node *))) == NULL) {
             perror("ERROR: No s'ha pogut reservar memoria");
             exit(EXIT_FAILURE);
         }
         // Llegim la primera columna de la linia que correspon amb la id del carrer
-        unsigned long id_carrer;
+        unsigned long id_carrer=0;
         fscanf(fitxer, "id=%lu", &id_carrer);
         // printf("Carrer %lu, amb %u conexions", id_carrer, num_conexions[i]);
         // Despres llegim tantes vegades com nodes hi ha al carrer
         for (unsigned j=0; j<num_conexions[i]; j++){
-            unsigned long long id_node;
+            unsigned long long id_node=0;
             fscanf(fitxer, ";%llu", &id_node);
             conexions[j] = &nodes[index_node(id_node, nodes, num_nodes)];
-            if (j == 0) continue;
+            if (j == 0) {continue;}
             afegir_conexio(conexions[j], conexions[j-1], id_carrer);
         }
         // Descartem el salt de linia
         fgetc(fitxer);
-        free(conexions);
+        free((void *)conexions);
     }
+    fclose(fitxer);
     free(num_conexions);
 }
-void afegir_conexio(Node *n1, Node *n2, unsigned long id_carrer){
-    n1->num_conexions++;
-    n2->num_conexions++;
-    // Afegim la conexio n1-n2 a la instancia del node 1
-    if ((n1->conexions = (Conexio *)realloc(n1->conexions, n1->num_conexions*sizeof(Conexio)))==NULL){
+void afegir_conexio(Node *node1, Node *node2, unsigned long id_carrer){
+    node1->num_conexions++;
+    node2->num_conexions++;
+    // Afegim la conexio node1-node2 a la instancia del node 1
+    if ((node1->conexions = (Conexio *)realloc(node1->conexions, node1->num_conexions*sizeof(Conexio)))==NULL){
         printf("ERROR: No s'ha pogut reservar memoria\n");
         exit(EXIT_FAILURE);
     }
-    Conexio conexio12 = {id_carrer, n2->id, distancia(n1, n2)};
-    n1->conexions[n1->num_conexions - 1] = conexio12;
-    // Afegim la conexio n1-n2 a la instancia del node 2
-    if ((n2->conexions = (Conexio *)realloc(n2->conexions, n2->num_conexions*sizeof(Conexio)))==NULL){
+    Conexio conexio12 = {id_carrer, node2->id, distancia(node1, node2)};
+    node1->conexions[node1->num_conexions - 1] = conexio12;
+    // Afegim la conexio node1-node2 a la instancia del node 2
+    if ((node2->conexions = (Conexio *)realloc(node2->conexions, node2->num_conexions*sizeof(Conexio)))==NULL){
         printf("ERROR: No s'ha pogut reservar memoria\n");
         exit(EXIT_FAILURE);
     }
-    Conexio conexio21 = {id_carrer, n1->id, distancia(n2, n1)};
-    n2->conexions[n2->num_conexions - 1] = conexio21;
+    Conexio conexio21 = {id_carrer, node1->id, distancia(node2, node1)};
+    node2->conexions[node2->num_conexions - 1] = conexio21;
 }
-void encua(Cua *c, Node *n, Node *objectiu){
+void encua(Cua *cua, Node *nodes, unsigned long num_nodes, Node *n, const double *pesos){
+    unsigned long index_n = index_node(n->id, nodes, num_nodes);
     ElementCua *e;
     if ((e = (ElementCua *)malloc(sizeof(ElementCua)))==NULL){
         perror("ERROR: No s'ha pogut reservar memoria");
@@ -338,45 +304,58 @@ void encua(Cua *c, Node *n, Node *objectiu){
     }
     e->seguent = NULL;
     e->node = n;
-    if (c->inici == NULL){
-        c->inici = e;
-        c->final = e;
+    if (cua->inici == NULL){
+        cua->inici = e;
+        cua->final = e;
         return;
     }
-    if (cost(e->node, objectiu) < cost((c->inici)->node, objectiu)){
-        e->seguent = c->inici;
-        c->inici = e;
+    unsigned long index_comparativa = index_node((cua->inici)->node->id, nodes, num_nodes);
+    if (pesos[index_n] < pesos[index_comparativa]){
+        e->seguent = cua->inici;
+        cua->inici = e;
         return;
     }
-    ElementCua *actual = c->inici;
+    ElementCua *actual = cua->inici;
     bool colocat = false;
     while (actual->seguent != NULL && !colocat){
-        if (cost(e->node, objectiu) < cost((actual->seguent)->node, objectiu)){
+        index_comparativa = index_node((actual->seguent)->node->id, nodes, num_nodes);
+        if (pesos[index_n] < pesos[index_comparativa]){
             e->seguent = actual->seguent;
             actual->seguent = e;
             colocat = true;
         }
-        else actual = actual->seguent;
+        else {actual = actual->seguent;}
     }
     if (actual->seguent == NULL){
         actual->seguent = e;
-        c->final = e;
+        cua->final = e;
     }
 }
-void reencua(Cua *c, Node *n, Node *objectiu){
-    if ((c->inici)->node == n){
-        c->inici = (c->inici)->seguent;
-        free(c->inici);
-        encua(c, n, objectiu);
+void reencua(Cua *cua, Node *nodes, unsigned long num_nodes, Node *n, const double *pesos){
+    if (cua->inici == NULL){
+        encua(cua, nodes, num_nodes, n, pesos);
         return;
     }
-    ElementCua *actual = c->inici;
+    ElementCua *actual = cua->inici;
+    if (actual->node == n) {
+        cua->inici = actual->seguent;
+        if (cua->inici == NULL) {
+            cua->final = NULL;
+        }
+        free(actual);
+        encua(cua, nodes, num_nodes, n, pesos);
+        return;
+    }
     while (actual->seguent != NULL){
         if ((actual->seguent)->node == n){
+            // Element que buscabem
             ElementCua *e = actual->seguent;
+            // Si volem treure l'ultim de la cua, hem de modificar l'apuntador al final
+            if (e->seguent == NULL) cua->final = actual;
+            // Fem que la cua perdi referencia a l'element buscat
             actual->seguent = e->seguent;
             free(e);
-            encua(c, n, objectiu);
+            encua(cua, nodes, num_nodes, n, pesos);
             return;
         }
         actual = actual->seguent;
@@ -384,27 +363,26 @@ void reencua(Cua *c, Node *n, Node *objectiu){
     printf("El node no estava a la cua");
     exit(EXIT_FAILURE);
 }
-Node *desencua(Cua * c){
-    if (c->inici == NULL){
+Node *desencua(Cua * cua){
+    if (cua->inici == NULL){
         return NULL;
     }
-    ElementCua *e = c->inici;
-    Node * n = e->node;
-    c->inici = e->seguent;
-    free(e);
-    if (c->inici ==  NULL){
-        c->final = NULL;
+    ElementCua *primer_element = cua->inici;
+    Node * node_desencuat = primer_element->node;
+    cua->inici = primer_element->seguent;
+    free(primer_element);
+    if (cua->inici ==  NULL){
+        cua->final = NULL;
     }
-    return n;
+    return node_desencuat;
 }
 int comparar_nodes(const void *a, const void *b) {
     const Node *node_a = a;
     const Node *node_b = b;
     if(node_a->id < node_b->id) {
         return -1;
-    } else {
-        return 1;
     }
+    return 1;
 }
 void mostrar_cami(Node *n){
     // Comptador de nodes al cami
@@ -412,17 +390,85 @@ void mostrar_cami(Node *n){
     // Node per recorrer tot el cami
     Node *actual = n;
     // Llista amb les direccions dels nodes del cami
-    Node **recorregut;
+    Node **recorregut = NULL;
     while (actual != NULL){
-        if ((recorregut = (Node **)realloc(recorregut, sizeof(Node *) * (pasos++))) == NULL){
+        pasos++;
+        if ((recorregut = (Node **)realloc(recorregut, sizeof(Node *) * (pasos))) == NULL){
             perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
             exit(EXIT_FAILURE);
         }
-        recorregut[pasos] = actual;
+        recorregut[pasos - 1] = actual;
         actual = actual->pare;
     }
     for (unsigned i=0; i<pasos; i++) {
-        Node *pas = recorregut[i];
+        Node *pas = recorregut[pasos - 1 - i];
         printf("Id=%llu | %.6g | %.6g | Dist=%.6g\n", pas->id, pas->latitud, pas->longitud, pes(pas));
     }
+    free((void *)recorregut);
+}
+bool A(Node *nodes, unsigned long num_nodes, Node *inicial, Node *final){
+        // La cua que utilitzarem
+    Cua cua={NULL, NULL};
+    // Marcador dels nodes visitats
+    bool *encuat = NULL;
+    // Llista de pesos
+    double *pesos = NULL;
+
+    if ((encuat = (bool *)calloc(num_nodes, sizeof(bool))) == NULL){
+        perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
+        exit(EXIT_FAILURE);
+    }
+    if ((pesos = (double *)malloc(num_nodes * sizeof(double))) == NULL){
+        perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
+        exit(EXIT_FAILURE);
+    }
+    // Inicialitzem tots els pesos al valor maxim posible del tipus de variable en la que emmagatzenem els pesos
+    for (unsigned long i=0; i<num_nodes; i++) pesos[i] = DBL_MAX; 
+    unsigned long index_inicial = index_node(inicial->id, nodes, num_nodes);
+    // Posem el pes del node inicial a 0
+    pesos[index_inicial] = 0;
+    // Guardem la direccio del node inicial
+    encua(&cua, nodes, num_nodes,inicial, pesos);
+    // Indicador si hem trobat el cami
+    bool trobat = false;
+    while (cua.inici != NULL){
+        Node *actual = desencua(&cua);
+        // Si el trobem ho marquem i surtim de la cerca
+        if (actual == final) {
+            trobat = true;
+            break;
+        }
+        unsigned long index_actual = index_node(actual->id, nodes, num_nodes);
+        encuat[index_actual] = false;
+        // Iterem sobre tots els fills
+        for (unsigned i=0; i<actual->num_conexions; i++){
+            unsigned long long id_fill = actual->conexions[i].id_node;
+            unsigned long index_fill = index_node(id_fill, nodes, num_nodes);
+            Node * fill = &nodes[index_fill];
+            double nou_pes = pesos[index_actual] + distancia(actual, fill);
+            if (nou_pes < pesos[index_fill]){
+                fill->pare = actual;
+                pesos[index_fill] = nou_pes;
+                if (encuat[index_fill]) {
+                    reencua(&cua, nodes, num_nodes, fill, pesos);
+                }
+                else{
+                    encua(&cua, nodes, num_nodes, fill, pesos);
+                    encuat[index_fill] = true;
+                }
+            }
+        }
+    }
+    free(encuat);
+    free(pesos);
+    ElementCua *e_actual = cua.inici;
+    ElementCua *e_anterior=NULL;
+    while(e_actual != NULL){
+        e_anterior = e_actual;
+        e_actual = e_actual->seguent;
+        free(e_anterior);
+    }
+    free(e_actual);
+    // Retornem un bool amb si hem trobat el cami o no 
+    return trobat;
 }

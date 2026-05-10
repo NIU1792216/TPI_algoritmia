@@ -1,0 +1,3 @@
+Comandos para pulir:
+valgrind --tool=memcheck --track-origins=yes --leak-check=full --show-leak-kinds=all -s ./out.o
+clang-tidy ./code.c -checks=* -quiet
