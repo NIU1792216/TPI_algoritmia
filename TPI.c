@@ -86,12 +86,12 @@ int main(int argc, char *argv[]){
     // Nombre de nodes
     unsigned long num_nodes;
     // Llegim les dades del fitxer Nodes.csv i guardem els nodes en una llista
-    llegir_nodes("Nodes_And.csv", &nodes, &num_nodes);
+    llegir_nodes("Nodes_Sb.csv", &nodes, &num_nodes);
     printf("S'han llegit %lu nodes del fitxer Nodes.csv\n", num_nodes);
     // Ordenem la llista de nodes per poder utilitzar la cerca binaria
     qsort(nodes, num_nodes, sizeof(Node), comparar_nodes);
     // Llegim les dades del fitxer Carrers.csv i guardem la informacio a nodes
-    llegir_carrers("Carrers_And.csv", nodes, num_nodes);
+    llegir_carrers("Carrers_Sb.csv", nodes, num_nodes);
     printf("S'ha llegit correctament el fitxer amb carrers\n");
     
     // Localitzem el node inicial
@@ -316,7 +316,7 @@ void encua(Cua *cua, Node *nodes, unsigned long num_nodes, Node *n, Node*objecti
         return;
     }
     unsigned long index_comparativa = index_node((cua->inici)->node->id, nodes, num_nodes);
-    if ((pesos[index_n] + distancia(n, objectiu)) < (pesos[index_comparativa] + distancia(n, objectiu))){
+    if ((pesos[index_n] + distancia(n, objectiu)) < (pesos[index_comparativa] + distancia(&nodes[index_comparativa], objectiu))){
         e->seguent = cua->inici;
         cua->inici = e;
         return;
@@ -325,7 +325,7 @@ void encua(Cua *cua, Node *nodes, unsigned long num_nodes, Node *n, Node*objecti
     bool colocat = false;
     while (actual->seguent != NULL && !colocat){
         index_comparativa = index_node((actual->seguent)->node->id, nodes, num_nodes);
-        if (pesos[index_n] < pesos[index_comparativa]){
+        if ((pesos[index_n] + distancia(n, objectiu)) < (pesos[index_comparativa] + distancia(&nodes[index_comparativa], objectiu))){
             e->seguent = actual->seguent;
             actual->seguent = e;
             colocat = true;
