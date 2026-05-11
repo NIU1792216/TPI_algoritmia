@@ -55,6 +55,8 @@ Node *desencua(Cua *c);
 int comparar_nodes(const void *a, const void *b);
 // Definim una funcio per mostrar el cami recorregut fins a un node donat
 void mostrar_cami(Node *n);
+// Definim una funcio per guardar el cami en un fitxer .txt
+void guardar_cami(Node *n, char nom_fitxer[]);
 // Definim la funcio per recorrer una llista i trobar el cami mes eficient (A*)
 bool A(Node *, unsigned long num_nodes, Node *inicial, Node*final);
 
@@ -98,8 +100,12 @@ int main(int argc, char *argv[]){
     Node *final = &nodes[index_node(id_final, nodes, num_nodes)];
     bool trobat = A(nodes, num_nodes, inicial, final);
 
-    if (!trobat) printf("No s'ha pogut trobar un cami des del node %llu fins al node %llu\n", id_inicial, id_final);
-    else mostrar_cami(final);
+    if (!trobat) {
+        printf("No s'ha pogut trobar un cami des del node %llu fins al node %llu\n", id_inicial, id_final);
+    } else {
+        mostrar_cami(final);
+        guardar_cami(final, "out.txt");
+    }
     // Alliberem memoria
     for (unsigned long i=0; i<num_nodes; i++) free(nodes[i].conexions);
     free(nodes);
@@ -181,14 +187,14 @@ void llegir_nodes(char nom_fitxer[], Node **nodes, unsigned long *num_nodes_lleg
         }
     }
     // Reservem memoria per al vector de nodes
-    if((*nodes = (Node*)malloc(num_nodes * sizeof(Node))) == NULL) {
+    if((*nodes = (Node*)malloc(num_nodes * sizeof(Node))) == NULL) { //NOLINT
         perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
         exit(EXIT_FAILURE);
     }
     // Tornem a l'inici del fitxer per llegir les dades dels nodes i guardar-les al vector
     rewind(fitxer);
     for(unsigned i = 0; i < num_nodes; i++) {
-        fscanf(fitxer, "%llu;%lf;%lf\n", &(*nodes)[i].id, &(*nodes)[i].latitud, &(*nodes)[i].longitud);
+        fscanf(fitxer, "%llu;%lf;%lf\n", &(*nodes)[i].id, &(*nodes)[i].latitud, &(*nodes)[i].longitud); //NOLINT
         (*nodes)[i].num_conexions = 0;
         (*nodes)[i].conexions = NULL;
         (*nodes)[i].pare = NULL;
@@ -245,7 +251,7 @@ void llegir_carrers(char nom_fitxer[], Node *nodes, unsigned long num_nodes){
         }
     }
     // Deixem de reservar la memoria reservada per la linia seguent a la ultima, que en realitat no existeix
-    if((num_conexions = (unsigned *)realloc(num_conexions, (num_carrers)*sizeof(unsigned))) == NULL) {
+    if((num_conexions = (unsigned *)realloc(num_conexions, (num_carrers)*sizeof(unsigned))) == NULL) { //NOLINT
         perror("ERROR: No s'ha pogut reservar memoria");
         exit(EXIT_FAILURE);
     }
@@ -254,24 +260,24 @@ void llegir_carrers(char nom_fitxer[], Node *nodes, unsigned long num_nodes){
     for (long unsigned i=0; i<num_carrers; i++){
         // en conexions guardarem l'index dels nodes del carrer que analitzem
         Node ** conexions=NULL;
-        if((conexions = (Node **)malloc(num_conexions[i]*sizeof(Node *))) == NULL) {
+        if((conexions = (Node **)malloc(num_conexions[i]*sizeof(Node *))) == NULL) { //NOLINT
             perror("ERROR: No s'ha pogut reservar memoria");
             exit(EXIT_FAILURE);
         }
         // Llegim la primera columna de la linia que correspon amb la id del carrer
         unsigned long id_carrer=0;
-        fscanf(fitxer, "id=%lu", &id_carrer);
+        fscanf(fitxer, "id=%lu", &id_carrer); //NOLINT
         // printf("Carrer %lu, amb %u conexions", id_carrer, num_conexions[i]);
         // Despres llegim tantes vegades com nodes hi ha al carrer
         for (unsigned j=0; j<num_conexions[i]; j++){
             unsigned long long id_node=0;
-            fscanf(fitxer, ";%llu", &id_node);
+            fscanf(fitxer, ";%llu", &id_node); //NOLINT
             conexions[j] = &nodes[index_node(id_node, nodes, num_nodes)];
             if (j == 0) {continue;}
             afegir_conexio(conexions[j], conexions[j-1], id_carrer);
         }
         // Descartem el salt de linia
-        fgetc(fitxer);
+        (void)fgetc(fitxer); //NOLINT
         free((void *)conexions);
     }
     fclose(fitxer);
@@ -402,9 +408,39 @@ void mostrar_cami(Node *n){
     }
     for (unsigned i=0; i<pasos; i++) {
         Node *pas = recorregut[pasos - 1 - i];
-        printf("Id=%llu | %.6g | %.6g | Dist=%.6g\n", pas->id, pas->latitud, pas->longitud, pes(pas));
+        printf("Id=%10llu | %7.6g | %7.6g | Dist=%.6g\n", pas->id, pas->latitud, pas->longitud, pes(pas));
     }
     free((void *)recorregut);
+}
+void guardar_cami(Node *n, char nom_fitxer[]){
+    // Comptador de nodes al cami
+    unsigned long pasos=0;
+    // Node per recorrer tot el cami
+    Node *actual = n;
+    // Llista amb les direccions dels nodes del cami
+    Node **recorregut = NULL;
+    while (actual != NULL){
+        pasos++;
+        if ((recorregut = (Node **)realloc(recorregut, sizeof(Node *) * (pasos))) == NULL){
+            perror("ERROR: No s'ha pogut reservar memoria per al vector de nodes");
+            exit(EXIT_FAILURE);
+        }
+        recorregut[pasos - 1] = actual;
+        actual = actual->pare;
+    }
+    FILE *fitxer=NULL;
+    fitxer = fopen(nom_fitxer,"w");
+    if (fitxer == NULL){
+        printf("No s'ha pogut obrir el fitxer %s\n", nom_fitxer);
+        exit(EXIT_FAILURE);
+    }
+    for (unsigned i=0; i<pasos; i++) {
+        Node *pas = recorregut[pasos - 1 - i];
+        fprintf(fitxer, "Id=%llu | %.6g | %.6g | Dist=%.6g\n", pas->id, pas->latitud, pas->longitud, pes(pas)); //NOLINT
+    }
+    fclose(fitxer);
+    free((void *)recorregut);
+
 }
 bool A(Node *nodes, unsigned long num_nodes, Node *inicial, Node *final){
         // La cua que utilitzarem
