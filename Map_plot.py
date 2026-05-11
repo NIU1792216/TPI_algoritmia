@@ -1,38 +1,31 @@
-#!/usr/bin/python3.6
+#!/usr/bin/python3
+import folium
+import webbrowser
 
-import json
-import os
-import matplotlib.pyplot as plt
-import numpy as np
-import sys
-import mplleaflet
-
-# fitxer d'entrada
-# in_file = sys.argv[1]
 in_file = "out.txt"
+mapfile = in_file.split('.')[-2] + ".html"
 
-# nom del fitxer de sortida: el mateix que l'entrada, canviant extensio per html
-mapfile = in_file.split('.')[-2]+".html"
-
-# convertim les dades del fitxer en un array del numpy
-latitud  = []
-longitud = []
+latitudes = []
+longitudes = []
 
 with open(in_file, 'r') as f:
     for line in f:
-        if line.startswith("#"): # Ignorem les linies que comencen per #
+        if line.startswith("#"):
             continue
         fields = line.split('|')
-        for field in fields:
-            field.strip();
-        latitud.append(float(fields[1]))
-        longitud.append(float(fields[2]))
+        # Assuming format: Id=... | lat | lon | Dist=...
+        lat = float(fields[1].strip())
+        lon = float(fields[2].strip())
+        latitudes.append(lat)
+        longitudes.append(lon)
 
-xy = np.array([[longitud[i],latitud[i]] for i in range(len(latitud))])
+# Create a map centered on the first point
+m = folium.Map(location=[latitudes[0], longitudes[0]], zoom_start=14)
 
-# Dibuixem el cami amb punts vermells connectats per linies blaves
-plt.plot(xy[:,0], xy[:,1], 'r.')
-plt.plot(xy[:,0], xy[:,1], 'b')
+# Add markers and polyline
+folium.PolyLine(list(zip(latitudes, longitudes)), color='blue', weight=2.5).add_to(m)
+for lat, lon in zip(latitudes, longitudes):
+    folium.CircleMarker([lat, lon], radius=3, color='red', fill=True).add_to(m)
 
-# Creem el mapa i el guardem amb el nom guardat a mapfile
-mplleaflet.show(path=mapfile)
+m.save(mapfile)
+webbrowser.open(mapfile)

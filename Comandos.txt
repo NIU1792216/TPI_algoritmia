@@ -1,3 +1,17 @@
+Compilar:
+gcc -Wall -Wextra -Werror -pedantic -g -o TPI.exe TPI.c -lm
 Comandos para pulir:
 valgrind --tool=memcheck --track-origins=yes --leak-check=full --show-leak-kinds=all -s ./out.o
 clang-tidy ./code.c -checks=* -quiet
+
+
+Creating environments in python:
+    Installing packages
+sudo apt update
+sudo apt install python3 python3-pip python3-venv
+    Creating environment:
+python3 -m venv my_environment
+    Activating environment
+source my_environment/bin/activate
+    To deactivate environment
+deactivate
